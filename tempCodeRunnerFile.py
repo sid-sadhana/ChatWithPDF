@@ -13,6 +13,7 @@ from sentence_transformers import SentenceTransformer
 from pinecone import Pinecone, ServerlessSpec
 import torch
 
+
 load_dotenv()
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
@@ -26,8 +27,10 @@ UPLOAD_FOLDER = 'uploads'
 NAMESPACE_FILE = 'namespaces.json'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+
 pc = Pinecone(api_key=PINECONE_API_KEY)
 INDEX_NAME = "quickstart"
+
 
 if INDEX_NAME not in [i.name for i in pc.list_indexes()]:
     pc.create_index(
@@ -44,6 +47,7 @@ def load_namespaces():
         with open(NAMESPACE_FILE, 'r') as f:
             return json.load(f)
     else:
+        
         with open(NAMESPACE_FILE, 'w') as f:
             json.dump({}, f)
         return {}
@@ -66,7 +70,6 @@ def cleanup_namespaces():
             del ns_map[ns]
     if removed:
         save_namespaces(ns_map)
-
 
 @app.route('/api/generate', methods=['POST'])
 def generate():
@@ -101,6 +104,7 @@ def generate():
     ]
     index.upsert(vectors=vectors, namespace=namespace)
 
+    
     import time
     time.sleep(1.5)
 
@@ -108,6 +112,7 @@ def generate():
     stm = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2', device=device)
     xq = stm.encode(query).tolist()
 
+    
     qs = index.query(vector=xq, namespace=namespace, top_k=10, include_metadata=True)
     if 'matches' not in qs or not qs['matches']:
         return jsonify({"error": "No relevant content found for the query."}), 404
@@ -132,7 +137,6 @@ def generate():
         pass
 
     return response
-
 
 if __name__ == '__main__':
     app.run(debug=True)
