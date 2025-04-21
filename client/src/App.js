@@ -1,9 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
+import { v4 as uuidv4 } from 'uuid';
 
 const App = () => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
+  const [pdfFile, setPdfFile] = useState(null);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -15,31 +17,39 @@ const App = () => {
   }, [messages]);
 
   const sendMessage = async () => {
-    if (input.trim()) {
+    if (input.trim() && pdfFile) {
       const userMessage = { text: input, sender: 'user' };
-      setMessages([...messages, userMessage]);
+      setMessages(prev => [...prev, userMessage]);
       setInput('');
+
+      const formData = new FormData();
+      formData.append('query', input);
+      formData.append('file', pdfFile, `${uuidv4()}.pdf`);
+
       try {
-        const response = await axios.post('http://localhost:5000/api/generate', { query: input });
+        const response = await axios.post('http://localhost:5000/api/generate', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
         const botMessage = { text: response.data, sender: 'bot' };
-        setMessages((prevMessages) => [...prevMessages, botMessage]);
+        setMessages(prev => [...prev, botMessage]);
       } catch (error) {
-        console.error('Error communicating with the bot:', error);
+        console.error(error);
       }
     }
   };
 
   return (
-    <div className="flex flex-col items-center justify-center h-screen bg-gray-900 text-white">
-      <div className="chat-container bg-gray-800 rounded-lg shadow-lg flex flex-col h-4/5 w-8/12">
-        <div className="chat-history overflow-y-auto px-4 py-2 flex-1">
-          {messages.map((msg, index) => (
+    <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center p-4">
+      <h1 className="text-4xl sm:text-5xl font-extrabold mb-6">ChatWithPDF</h1>
+      <div className="w-full max-w-3xl bg-gray-800 rounded-2xl shadow-lg flex flex-col flex-1">
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {messages.map((msg, i) => (
             <div
-              key={index}
-              className={`chat-message rounded-md p-2 ${
+              key={i}
+              className={`max-w-2xl break-words p-3 rounded-xl ${
                 msg.sender === 'user'
-                  ? 'bg-blue-500 text-white self-end md:max-w-6/12 w-full rounded-xl mb-2'
-                  : 'bg-gray-700 text-white self-start md:max-w-6/12 w-full rounded-xl mb-12'
+                  ? 'self-end bg-blue-600'
+                  : 'self-start bg-gray-700'
               }`}
             >
               {msg.text}
@@ -47,17 +57,29 @@ const App = () => {
           ))}
           <div ref={messagesEndRef} />
         </div>
-        <div className="chat-input px-4 py-2 pb-4">
+
+        <div className="p-4 grid grid-cols-[auto_1fr_auto] gap-3 items-center">
+          <label className="cursor-pointer bg-green-500 hover:bg-green-600 transition px-4 py-2 rounded-md text-sm sm:text-base">
+            {pdfFile ? 'PDF Selected' : 'Upload PDF'}
+            <input
+              type="file"
+              accept=".pdf"
+              className="hidden"
+              onChange={e => setPdfFile(e.target.files[0])}
+            />
+          </label>
+
           <input
             type="text"
-            className="flex-1 pl-2 w-11/12 h-12 bg-gray-700 rounded-l-md focus:outline-none placeholder-gray-400"
+            className="bg-gray-700 rounded-md h-12 px-4 focus:outline-none placeholder-gray-400 w-full"
             placeholder="Type your message..."
             value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && sendMessage()}
           />
+
           <button
-            className="p-2 bg-blue-600 w-1/12 h-12 rounded-r-md hover:bg-blue-700 focus:outline-none"
+            className="bg-blue-600 hover:bg-blue-700 transition px-6 py-2 rounded-md h-12 text-sm sm:text-base"
             onClick={sendMessage}
           >
             Send
