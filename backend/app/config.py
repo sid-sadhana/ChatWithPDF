@@ -17,11 +17,16 @@ class Config:
 
     # --- Pinecone ---
     PINECONE_API_KEY = os.getenv("PINECONE_API_KEY", "")
-    PINECONE_INDEX_HOST = os.getenv("PINECONE_INDEX_HOST", "")
+    PINECONE_DENSE_HOST = os.getenv("PINECONE_DENSE_HOST", "")
+    PINECONE_SPARSE_HOST = os.getenv("PINECONE_SPARSE_HOST", "")
+    HYBRID_ALPHA = float(os.getenv("HYBRID_ALPHA", "0.7"))
 
     # --- Ollama ---
     OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:4b")
+
+    # --- Reranker ---
+    RERANKER_MODEL = os.getenv("RERANKER_MODEL", "Qwen/Qwen3-VL-Reranker-2B")
 
     # --- RAG ---
     CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "500"))

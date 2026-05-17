@@ -1,27 +1,78 @@
 # ChatWithPDF
 
-Full-stack AI app that lets users upload a PDF and chat with it using naive RAG. Documents are chunked, embedded via Pinecone's Inference API (llama-text-embed-v2), stored in Pinecone, and answered by a local Ollama LLM.
+Full-stack RAG app that lets users upload a PDF and chat with it. Uses hybrid search (dense + sparse), cross-encoder reranking, RAGAS evaluation, and a local LLM.
 
 ```
-                         ┌──────────────────┐
-┌────────────┐   /api    │     Backend      │     ┌──────────────┐
-│  Frontend  │──────────▶│   Flask API      │────▶│   Pinecone   │
-│ React+TW   │           │                  │     │  Vector DB + │
-└────────────┘           │                  │     │  Embeddings  │
-                         │                  │     └──────────────┘
-                         │                  │     ┌──────────────┐
-                         │                  │────▶│ Ollama (LLM) │
-                         └──────────────────┘     └──────────────┘
+                              ┌───────────────────┐
+┌────────────┐    /api        │     Backend       │
+│  Frontend  │───────────────>│    Flask API      │
+│ React + TW │                │                   │
+│ + Framer   │                │  ┌─────────────┐  │     ┌──────────────────┐
+└────────────┘                │  │ Semantic     │  │     │    Pinecone      │
+                              │  │ Chunking     │  │     │                  │
+      ┌──────────┐            │  └──────┬───────┘  │     │  Dense Index     │
+      │  RAGAS   │            │         │          │────>│  (llama-text-    │
+      │  Eval    │<───────────│  ┌──────▼───────┐  │     │   embed-v2)     │
+      │  Panel   │            │  │ Hybrid Search│  │     │                  │
+      └──────────┘            │  │ Dense+Sparse │  │────>│  Sparse Index   │
+                              │  └──────┬───────┘  │     │  (pinecone-     │
+                              │         │          │     │   sparse-v0)    │
+                              │  ┌──────▼───────┐  │     └──────────────────┘
+                              │  │ RRF Fusion   │  │
+                              │  └──────┬───────┘  │     ┌──────────────────┐
+                              │         │          │     │  Ollama (local)  │
+                              │  ┌──────▼───────┐  │────>│  qwen3.5:2b      │
+                              │  │   Reranker   │  │     └──────────────────┘
+                              │  │ Qwen3-VL-2B  │  │
+                              │  └──────┬───────┘  │
+                              │         │          │
+                              │  ┌──────▼───────┐  │
+                              │  │  LLM Answer  │  │
+                              │  └──────────────┘  │
+                              └───────────────────┘
 ```
+
+## RAG Pipeline
+
+1. **Upload** PDF -> extract text -> semantic chunking (by sections/headings/paragraphs)
+2. **Index** chunks into both Pinecone dense + sparse indexes (server-side embeddings)
+3. **Query** -> hybrid search (dense + sparse) -> Reciprocal Rank Fusion -> Qwen3 cross-encoder reranking -> top 5 chunks
+4. **Generate** answer with Ollama using retrieved context
+5. **Evaluate** pipeline quality with RAGAS (faithfulness, relevancy, context precision)
+
+## Retrieval Stages (visible in UI)
+
+Each query shows results from all four retrieval stages in tabs:
+
+| Stage | Method | Purpose |
+| --- | --- | --- |
+| **Dense** | llama-text-embed-v2 | Semantic similarity search |
+| **Sparse** | pinecone-sparse-english-v0 | Keyword/lexical matching |
+| **Fused (RRF)** | Reciprocal Rank Fusion (K=60, alpha=0.7) | Merge dense + sparse rankings |
+| **Reranked** | Qwen3-VL-Reranker-2B cross-encoder | Pointwise relevance scoring |
+
+## RAGAS Evaluation
+
+Built-in evaluation panel (right side of chat) runs three reference-free metrics using the conversation's Q&A history:
+
+| Metric | What it measures |
+| --- | --- |
+| **Faithfulness** | Is the answer grounded in the retrieved context? |
+| **Answer Relevancy** | Is the answer relevant to the question? |
+| **Context Precision** | Are the retrieved chunks relevant to the query? |
+
+Shows aggregate scores and per-question breakdown.
 
 ## Stack
 
 - **Frontend** React, Tailwind CSS, Framer Motion
 - **Backend** Flask, Gunicorn
-- **Embeddings** Pinecone Inference API (llama-text-embed-v2, server-side)
+- **Dense Embeddings** Pinecone Inference API (llama-text-embed-v2)
+- **Sparse Embeddings** Pinecone Inference API (pinecone-sparse-english-v0)
+- **Reranker** Qwen3-VL-Reranker-2B (local cross-encoder)
+- **LLM** Ollama (qwen3.5:2b)
 - **Vector DB** Pinecone (namespace per conversation)
-- **LLM** Ollama (qwen3.5:2b, local)
-- **Conversations** In-memory
+- **Evaluation** RAGAS (faithfulness, relevancy, context precision)
 
 ## Repository layout
 
@@ -39,6 +90,8 @@ ChatWithPDF/
 │   │       ├── chat_service.py
 │   │       ├── pdf_service.py
 │   │       ├── vector_store.py
+│   │       ├── reranker_service.py
+│   │       ├── eval_service.py
 │   │       ├── llm_service.py
 │   │       ├── conversation_service.py
 │   │       └── exceptions.py
@@ -50,9 +103,7 @@ ChatWithPDF/
 │   ├── src/
 │   ├── Dockerfile
 │   └── nginx.conf
-├── docker-compose.yml
-├── docker-compose.override.yml
-└── .env.example
+└── docker-compose.yml
 ```
 
 ## Prerequisites
@@ -63,15 +114,17 @@ ChatWithPDF/
 
 ## Quick start
 
-### 1. Pull Ollama model
+### 1. Ollama model
 
 ```bash
 ollama pull qwen3.5:2b
 ```
 
-### 2. Create Pinecone index
+### 2. Pinecone indexes
 
-Create an index named `ragora` in the Pinecone dashboard with integrated embedding model `llama-text-embed-v2`.
+Create two indexes in the Pinecone dashboard:
+- **Dense index** with integrated model `llama-text-embed-v2`
+- **Sparse index** with integrated model `pinecone-sparse-english-v0`
 
 ### 3. Backend
 
@@ -79,9 +132,11 @@ Create an index named `ragora` in the Pinecone dashboard with integrated embeddi
 cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # fill in PINECONE_API_KEY and PINECONE_INDEX_HOST
+cp .env.example .env   # fill in PINECONE_API_KEY, PINECONE_DENSE_HOST, PINECONE_SPARSE_HOST
 flask --app wsgi run --debug --port 8000
 ```
+
+First run downloads the Qwen3-VL-Reranker-2B model (~4GB).
 
 ### 4. Frontend
 
@@ -91,13 +146,13 @@ npm install
 npm start
 ```
 
-Frontend runs on http://localhost:3000, backend on http://localhost:8000.
+Frontend on http://localhost:3000, backend on http://localhost:8000.
 
 ## Docker
 
 ```bash
 cp backend/.env.example backend/.env
-# fill in PINECONE_API_KEY and PINECONE_INDEX_HOST
+# fill in Pinecone keys and hosts
 docker compose up --build
 ```
 
@@ -106,17 +161,17 @@ docker compose up --build
 
 ## Configuration
 
-All settings are environment-driven. See `backend/.env.example`:
-
 | Variable | Default | Description |
 | --- | --- | --- |
-| `PINECONE_API_KEY` | — | Pinecone credentials (required) |
-| `PINECONE_INDEX_HOST` | — | Pinecone index host URL (required) |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server |
+| `PINECONE_API_KEY` | -- | Pinecone credentials (required) |
+| `PINECONE_DENSE_HOST` | -- | Dense index host URL (required) |
+| `PINECONE_SPARSE_HOST` | -- | Sparse index host URL (required) |
+| `HYBRID_ALPHA` | `0.7` | Dense vs sparse weight (0-1) |
 | `OLLAMA_MODEL` | `qwen3.5:2b` | LLM model |
-| `CHUNK_SIZE` | `1000` | Characters per chunk |
+| `RERANKER_MODEL` | `Qwen/Qwen3-VL-Reranker-2B` | Cross-encoder reranker |
+| `CHUNK_SIZE` | `1000` | Max characters per chunk |
 | `CHUNK_OVERLAP` | `200` | Overlap between chunks |
-| `RETRIEVAL_TOP_K` | `5` | Top-k results retrieved |
+| `RETRIEVAL_TOP_K` | `5` | Final results after reranking |
 
 ## API
 
@@ -128,6 +183,7 @@ All settings are environment-driven. See `backend/.env.example`:
 | `GET` | `/api/conversations/:id` | Get conversation with messages |
 | `DELETE` | `/api/conversations/:id` | Delete a conversation |
 | `DELETE` | `/api/conversations` | Delete all data |
+| `POST` | `/api/conversations/:id/evaluate` | Run RAGAS evaluation |
 | `GET` | `/health` | Liveness probe |
 
 ## License

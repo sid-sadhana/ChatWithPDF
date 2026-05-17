@@ -1,17 +1,76 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
+const TABS = [
+  { key: "reranked", label: "Reranked" },
+  { key: "fused", label: "Fused (RRF)" },
+  { key: "dense", label: "Dense" },
+  { key: "sparse", label: "Sparse" },
+];
+
+function SourceList({ items }) {
+  if (!items || items.length === 0) {
+    return (
+      <p className="text-[11px] text-white/20 italic py-2">No results</p>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {items.map((s, i) => (
+        <div
+          key={i}
+          className="glass rounded-xl px-3 py-2.5 border border-white/[0.04]"
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[10px] font-medium text-accent/70 bg-accent/10 px-1.5 py-0.5 rounded">
+              #{i + 1}
+            </span>
+            {s.score != null && (
+              <span className="text-[10px] text-white/20">
+                score: {typeof s.score === "number" && s.score < 1 ? (s.score * 100).toFixed(1) + "%" : s.score?.toFixed?.(4) ?? s.score}
+              </span>
+            )}
+            {s.rerank_score != null && (
+              <span className="text-[10px] text-emerald-400/50">
+                rerank: {s.rerank_score.toFixed(4)}
+              </span>
+            )}
+            {s.match && (
+              <span className="text-[10px] text-purple-300/40">
+                {s.match}
+              </span>
+            )}
+          </div>
+          <p className="text-[12px] text-white/40 leading-relaxed line-clamp-4">
+            {s.text}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function MessageBubble({ message, index }) {
   const isUser = message.sender === "user";
   const [copied, setCopied] = useState(false);
   const [showSources, setShowSources] = useState(false);
-  const sources = message.sources || [];
+  const [activeTab, setActiveTab] = useState("reranked");
+
+  const sources = message.sources || {};
+  const isOldFormat = Array.isArray(sources);
+  const hasSources = isOldFormat
+    ? sources.length > 0
+    : Object.values(sources).some((arr) => arr && arr.length > 0);
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(message.text);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
+
+  const totalCount = isOldFormat
+    ? sources.length
+    : Object.values(sources).reduce((sum, arr) => sum + (arr?.length || 0), 0);
 
   return (
     <motion.div
@@ -53,13 +112,13 @@ export function MessageBubble({ message, index }) {
         {/* actions for bot messages */}
         {!isUser && (
           <div className="flex items-center gap-1 mt-1.5 ml-1">
-            {sources.length > 0 && (
+            {hasSources && (
               <button
                 onClick={() => setShowSources(!showSources)}
                 className="flex items-center gap-1 text-[11px] text-white/25 hover:text-white/50 transition-colors px-2 py-1 rounded-md hover:bg-white/[0.04]"
               >
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                {showSources ? "Hide" : "Show"} {sources.length} sources
+                {showSources ? "Hide" : "Show"} sources ({totalCount})
               </button>
             )}
 
@@ -79,7 +138,7 @@ export function MessageBubble({ message, index }) {
           </div>
         )}
 
-        {/* sources panel */}
+        {/* sources panel with tabs */}
         <AnimatePresence>
           {showSources && (
             <motion.div
@@ -89,26 +148,34 @@ export function MessageBubble({ message, index }) {
               transition={{ duration: 0.25 }}
               className="overflow-hidden mt-2"
             >
-              <div className="space-y-2">
-                {sources.map((s, i) => (
-                  <div
-                    key={i}
-                    className="glass rounded-xl px-3 py-2.5 border border-white/[0.04]"
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-[10px] font-medium text-accent/70 bg-accent/10 px-1.5 py-0.5 rounded">
-                        #{i + 1}
-                      </span>
-                      <span className="text-[10px] text-white/20">
-                        score: {(s.score * 100).toFixed(1)}%
-                      </span>
-                    </div>
-                    <p className="text-[12px] text-white/40 leading-relaxed line-clamp-4">
-                      {s.text}
-                    </p>
+              {isOldFormat ? (
+                <SourceList items={sources} />
+              ) : (
+                <div>
+                  {/* tab bar */}
+                  <div className="flex gap-1 mb-2 overflow-x-auto pb-1">
+                    {TABS.map((tab) => {
+                      const count = sources[tab.key]?.length || 0;
+                      return (
+                        <button
+                          key={tab.key}
+                          onClick={() => setActiveTab(tab.key)}
+                          className={`text-[10px] px-2.5 py-1 rounded-lg whitespace-nowrap transition-all ${
+                            activeTab === tab.key
+                              ? "bg-accent/20 text-accent border border-accent/30"
+                              : "text-white/30 hover:text-white/50 border border-white/[0.05] hover:border-white/10"
+                          }`}
+                        >
+                          {tab.label} ({count})
+                        </button>
+                      );
+                    })}
                   </div>
-                ))}
-              </div>
+
+                  {/* active tab content */}
+                  <SourceList items={sources[activeTab] || []} />
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>

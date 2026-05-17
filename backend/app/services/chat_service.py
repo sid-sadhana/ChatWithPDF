@@ -5,8 +5,10 @@ import logging
 from typing import Any, Mapping
 
 from app.services.conversation_service import ConversationService
+from app.services.eval_service import EvalService
 from app.services.llm_service import LLMService
 from app.services.pdf_service import PDFService
+from app.services.reranker_service import RerankerService
 from app.services.vector_store import VectorStore
 
 log = logging.getLogger(__name__)
@@ -25,12 +27,16 @@ class ChatService:
         pdf: PDFService,
         store: VectorStore,
         llm: LLMService,
+        reranker: RerankerService,
+        eval_service: EvalService,
         conversations: ConversationService,
         retrieval_top_k: int,
     ) -> None:
         self.pdf = pdf
         self.store = store
         self.llm = llm
+        self.reranker = reranker
+        self.eval_service = eval_service
         self.conversations = conversations
         self.retrieval_top_k = retrieval_top_k
 
@@ -52,13 +58,19 @@ class ChatService:
 
         self.conversations.add_message(conversation_id, role="user", content=query)
 
-        results = self.store.search(
+        search_results = self.store.search(
             query_text=query,
             namespace=conv["namespace"],
-            top_k=self.retrieval_top_k,
+            top_k=self.retrieval_top_k * 4,
         )
 
-        context = "\n\n---\n\n".join(r["text"] for r in results) if results else "No relevant content found."
+        dense_hits = search_results["dense"]
+        sparse_hits = search_results["sparse"]
+        fused_hits = search_results["fused"]
+        reranked_hits = self.reranker.rerank(query, fused_hits)
+
+        context_chunks = reranked_hits if reranked_hits else fused_hits
+        context = "\n\n---\n\n".join(r["text"] for r in context_chunks) if context_chunks else "No relevant content found."
 
         history = [
             {"role": m["role"], "content": m["content"]}
@@ -72,10 +84,16 @@ class ChatService:
             conversation_id, role="assistant", content=answer
         )
 
+        top_k = self.retrieval_top_k
         return {
             "message": msg,
             "conversation_id": conversation_id,
-            "sources": results,
+            "sources": {
+                "dense": dense_hits[:top_k],
+                "sparse": sparse_hits[:top_k],
+                "fused": fused_hits[:top_k],
+                "reranked": reranked_hits[:top_k],
+            },
         }
 
 
@@ -86,11 +104,21 @@ def build_chat_service(config: Mapping[str, Any]) -> ChatService:
     )
     store = VectorStore(
         api_key=str(config["PINECONE_API_KEY"]),
-        index_host=str(config["PINECONE_INDEX_HOST"]),
+        dense_host=str(config["PINECONE_DENSE_HOST"]),
+        sparse_host=str(config["PINECONE_SPARSE_HOST"]),
+        alpha=float(config["HYBRID_ALPHA"]),
     )
     llm = LLMService(
         base_url=str(config["OLLAMA_BASE_URL"]),
         model=str(config["OLLAMA_MODEL"]),
+    )
+    reranker = RerankerService(
+        model_name=str(config["RERANKER_MODEL"]),
+        top_k=int(config["RETRIEVAL_TOP_K"]),
+    )
+    eval_svc = EvalService(
+        ollama_base_url=str(config["OLLAMA_BASE_URL"]),
+        ollama_model=str(config["OLLAMA_MODEL"]),
     )
     conversations = ConversationService()
 
@@ -98,6 +126,8 @@ def build_chat_service(config: Mapping[str, Any]) -> ChatService:
         pdf=pdf,
         store=store,
         llm=llm,
+        reranker=reranker,
+        eval_service=eval_svc,
         conversations=conversations,
         retrieval_top_k=int(config["RETRIEVAL_TOP_K"]),
     )

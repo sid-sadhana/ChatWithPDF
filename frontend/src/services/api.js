@@ -41,3 +41,10 @@ export async function deleteConversation(conversationId) {
 export async function deleteAllConversations() {
   await apiClient.delete("/api/conversations");
 }
+
+export async function evaluateConversation(conversationId) {
+  const res = await apiClient.post(
+    `/api/conversations/${conversationId}/evaluate`
+  );
+  return res.data;
+}

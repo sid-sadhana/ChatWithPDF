@@ -103,3 +103,42 @@ def delete_all():
         svc.store.delete_namespace(conv["namespace"])
         svc.conversations.delete(conv["conversation_id"])
     return jsonify(ok=True), 200
+
+
+# ── RAGAS evaluation on a conversation ───────────────────────────
+@api_bp.post("/conversations/<conversation_id>/evaluate")
+def evaluate_conversation(conversation_id: str):
+    svc = _svc()
+
+    if not svc.eval_service.available:
+        return jsonify(error="RAGAS evaluation is not available (missing dependencies)"), 503
+
+    conv = svc.conversations.get(conversation_id)
+    if not conv:
+        return jsonify(error="Conversation not found"), 404
+
+    messages = conv.get("messages", [])
+    qa_pairs = []
+    for i, msg in enumerate(messages):
+        if (
+            msg["role"] == "user"
+            and i + 1 < len(messages)
+            and messages[i + 1]["role"] == "assistant"
+        ):
+            search_results = svc.store.search(
+                query_text=msg["content"],
+                namespace=conv["namespace"],
+                top_k=svc.retrieval_top_k,
+            )
+            contexts = [r["text"] for r in search_results["fused"]]
+            qa_pairs.append({
+                "question": msg["content"],
+                "answer": messages[i + 1]["content"],
+                "contexts": contexts,
+            })
+
+    if not qa_pairs:
+        raise BadRequestError("No Q&A pairs found in conversation")
+
+    result = svc.eval_service.evaluate(qa_pairs)
+    return jsonify(result), 200
