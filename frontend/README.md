@@ -1,6 +1,6 @@
 # Frontend -- ChatWithPDF UI
 
-React + Tailwind CSS + Framer Motion frontend for ChatWithPDF. Features a sidebar with conversation management, chat interface with retrieval stage tabs (dense/sparse/fused/reranked), RAGAS evaluation panel, and glassmorphic dark theme.
+React + Tailwind CSS + Framer Motion frontend for ChatWithPDF. Features a sidebar with conversation management, chat interface with retrieval stage tabs (dense/sparse/fused/reranked), and glassmorphic dark theme.
 
 ## Layout
 
@@ -15,7 +15,6 @@ frontend/
 │   │   ├── MessageBubble.jsx
 │   │   ├── ChatInput.jsx
 │   │   ├── EmptyState.jsx
-│   │   ├── EvalPanel.jsx
 │   │   └── Toast.jsx
 │   ├── hooks/
 │   │   └── useAutoScroll.js

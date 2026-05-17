@@ -1,6 +1,6 @@
 # ChatWithPDF
 
-Full-stack RAG app that lets users upload a PDF and chat with it. Uses hybrid search (dense + sparse), cross-encoder reranking, RAGAS evaluation, and a local LLM.
+Full-stack RAG app that lets users upload a PDF and chat with it. Uses hybrid search (dense + sparse), reciprocal rank fusion, cross-encoder reranking, and a local LLM.
 
 ```
                               ┌───────────────────┐
@@ -10,11 +10,11 @@ Full-stack RAG app that lets users upload a PDF and chat with it. Uses hybrid se
 │ + Framer   │                │  ┌─────────────┐  │     ┌──────────────────┐
 └────────────┘                │  │ Semantic     │  │     │    Pinecone      │
                               │  │ Chunking     │  │     │                  │
-      ┌──────────┐            │  └──────┬───────┘  │     │  Dense Index     │
-      │  RAGAS   │            │         │          │────>│  (llama-text-    │
-      │  Eval    │<───────────│  ┌──────▼───────┐  │     │   embed-v2)     │
-      │  Panel   │            │  │ Hybrid Search│  │     │                  │
-      └──────────┘            │  │ Dense+Sparse │  │────>│  Sparse Index   │
+                              │  └──────┬───────┘  │     │  Dense Index     │
+                              │         │          │────>│  (llama-text-    │
+                              │  ┌──────▼───────┐  │     │   embed-v2)     │
+                              │  │ Hybrid Search│  │     │                  │
+                              │  │ Dense+Sparse │  │────>│  Sparse Index   │
                               │  └──────┬───────┘  │     │  (pinecone-     │
                               │         │          │     │   sparse-v0)    │
                               │  ┌──────▼───────┐  │     └──────────────────┘
@@ -38,7 +38,6 @@ Full-stack RAG app that lets users upload a PDF and chat with it. Uses hybrid se
 2. **Index** chunks into both Pinecone dense + sparse indexes (server-side embeddings)
 3. **Query** -> hybrid search (dense + sparse) -> Reciprocal Rank Fusion -> Qwen3 cross-encoder reranking -> top 5 chunks
 4. **Generate** answer with Ollama using retrieved context
-5. **Evaluate** pipeline quality with RAGAS (faithfulness, relevancy, context precision)
 
 ## Retrieval Stages (visible in UI)
 
@@ -51,18 +50,6 @@ Each query shows results from all four retrieval stages in tabs:
 | **Fused (RRF)** | Reciprocal Rank Fusion (K=60, alpha=0.7) | Merge dense + sparse rankings |
 | **Reranked** | Qwen3-VL-Reranker-2B cross-encoder | Pointwise relevance scoring |
 
-## RAGAS Evaluation
-
-Built-in evaluation panel (right side of chat) runs three reference-free metrics using the conversation's Q&A history:
-
-| Metric | What it measures |
-| --- | --- |
-| **Faithfulness** | Is the answer grounded in the retrieved context? |
-| **Answer Relevancy** | Is the answer relevant to the question? |
-| **Context Precision** | Are the retrieved chunks relevant to the query? |
-
-Shows aggregate scores and per-question breakdown.
-
 ## Stack
 
 - **Frontend** React, Tailwind CSS, Framer Motion
@@ -72,7 +59,6 @@ Shows aggregate scores and per-question breakdown.
 - **Reranker** Qwen3-VL-Reranker-2B (local cross-encoder)
 - **LLM** Ollama (qwen3.5:2b)
 - **Vector DB** Pinecone (namespace per conversation)
-- **Evaluation** RAGAS (faithfulness, relevancy, context precision)
 
 ## Repository layout
 
@@ -91,7 +77,6 @@ ChatWithPDF/
 │   │       ├── pdf_service.py
 │   │       ├── vector_store.py
 │   │       ├── reranker_service.py
-│   │       ├── eval_service.py
 │   │       ├── llm_service.py
 │   │       ├── conversation_service.py
 │   │       └── exceptions.py
@@ -183,7 +168,6 @@ docker compose up --build
 | `GET` | `/api/conversations/:id` | Get conversation with messages |
 | `DELETE` | `/api/conversations/:id` | Delete a conversation |
 | `DELETE` | `/api/conversations` | Delete all data |
-| `POST` | `/api/conversations/:id/evaluate` | Run RAGAS evaluation |
 | `GET` | `/health` | Liveness probe |
 
 ## License

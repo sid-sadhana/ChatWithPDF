@@ -5,7 +5,6 @@ import logging
 from typing import Any, Mapping
 
 from app.services.conversation_service import ConversationService
-from app.services.eval_service import EvalService
 from app.services.llm_service import LLMService
 from app.services.pdf_service import PDFService
 from app.services.reranker_service import RerankerService
@@ -28,7 +27,6 @@ class ChatService:
         store: VectorStore,
         llm: LLMService,
         reranker: RerankerService,
-        eval_service: EvalService,
         conversations: ConversationService,
         retrieval_top_k: int,
     ) -> None:
@@ -36,7 +34,6 @@ class ChatService:
         self.store = store
         self.llm = llm
         self.reranker = reranker
-        self.eval_service = eval_service
         self.conversations = conversations
         self.retrieval_top_k = retrieval_top_k
 
@@ -116,10 +113,6 @@ def build_chat_service(config: Mapping[str, Any]) -> ChatService:
         model_name=str(config["RERANKER_MODEL"]),
         top_k=int(config["RETRIEVAL_TOP_K"]),
     )
-    eval_svc = EvalService(
-        ollama_base_url=str(config["OLLAMA_BASE_URL"]),
-        ollama_model=str(config["OLLAMA_MODEL"]),
-    )
     conversations = ConversationService()
 
     return ChatService(
@@ -127,7 +120,6 @@ def build_chat_service(config: Mapping[str, Any]) -> ChatService:
         store=store,
         llm=llm,
         reranker=reranker,
-        eval_service=eval_svc,
         conversations=conversations,
         retrieval_top_k=int(config["RETRIEVAL_TOP_K"]),
     )

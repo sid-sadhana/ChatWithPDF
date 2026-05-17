@@ -1,6 +1,6 @@
 # Backend -- ChatWithPDF API
 
-Flask API with hybrid RAG pipeline: semantic chunking, dense + sparse search with RRF, cross-encoder reranking, RAGAS evaluation, and local LLM generation.
+Flask API with hybrid RAG pipeline: semantic chunking, dense + sparse search with RRF, cross-encoder reranking, and local LLM generation.
 
 ## Layout
 
@@ -10,7 +10,7 @@ backend/
 │   ├── __init__.py              # app factory
 │   ├── config.py                # env-driven config
 │   ├── api/
-│   │   ├── routes.py            # /api/upload, /api/chat, /api/conversations, /api/.../evaluate
+│   │   ├── routes.py            # /api/upload, /api/chat, /api/conversations
 │   │   ├── health.py            # /health, /ready
 │   │   └── errors.py            # error handlers
 │   └── services/
@@ -18,7 +18,6 @@ backend/
 │       ├── pdf_service.py       # PDF extraction + semantic chunking
 │       ├── vector_store.py      # Hybrid search (dense + sparse + RRF)
 │       ├── reranker_service.py  # Qwen3-VL cross-encoder reranker
-│       ├── eval_service.py      # RAGAS evaluation (faithfulness, relevancy, precision)
 │       ├── llm_service.py       # Ollama wrapper
 │       ├── conversation_service.py  # in-memory store
 │       └── exceptions.py
@@ -33,7 +32,6 @@ backend/
 ```
 PDF -> semantic chunk -> upsert to dense + sparse indexes
 Query -> hybrid search -> RRF merge -> cross-encoder rerank -> top K -> LLM
-Evaluate -> RAGAS metrics on Q&A pairs (faithfulness, relevancy, context precision)
 ```
 
 ## Local development
