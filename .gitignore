@@ -1,2 +1,39 @@
+# --- secrets / env ---
 .env
-client/node_modules
+.env.local
+.env.*.local
+
+# --- python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# --- backend runtime data ---
+backend/instance/uploads/
+backend/instance/namespaces.json
+
+# --- node / frontend ---
+node_modules/
+frontend/build/
+frontend/.eslintcache
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- claude ---
+.claude/
+
+# --- editors / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- docker ---
+*.pid
